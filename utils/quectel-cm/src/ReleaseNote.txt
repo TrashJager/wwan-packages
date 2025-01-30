@@ -1,5 +1,11 @@
 Release Notes
 
+[V1.6.7]
+Date:   10/17/2024
+enhancement:
+  1. Support AT dialing
+fix:
+
 [V1.6.5]
 Date:   7/3/2023
 enhancement:
@@ -12,7 +18,6 @@ enhancement:
   7. Prioritize the use of IP commands for optimization, and use ifconfig if not available
   8. Optimize and add/remove copyright
 fix:
-
 
 [V1.6.4]
 Date:   9/7/2022

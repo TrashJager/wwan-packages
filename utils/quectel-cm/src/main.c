@@ -1,20 +1,22 @@
-/******************************************************************************
-  @file    main.c
-  @brief   The entry program.
+/*
+    Copyright (C) 2024 Quectel Wireless Solutions Co., Ltd.
 
-  DESCRIPTION
-  Connectivity Management Tool for USB network adapter of Quectel wireless cellular modules.
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License
+    as published by the Free Software Foundation; either version 2
+    of the License, or (at your option) any later version.
 
-  INITIALIZATION AND SEQUENCING REQUIREMENTS
-  None.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
 
-  ---------------------------------------------------------------------------
-  Copyright (c) 2016 -2023 Quectel Wireless Solution, Co., Ltd.  All Rights Reserved.
-  Quectel Wireless Solution Proprietary and Confidential.
-  ---------------------------------------------------------------------------
-******************************************************************************/
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, see
+    <https://www.gnu.org/licenses/>.
+*/
 
-#include "QMIThread.h"
+#include "compreh.h"
 #include <sys/wait.h>
 #include <sys/utsname.h>
 #include <sys/time.h>
@@ -33,6 +35,7 @@ extern int ql_get_netcard_driver_info(const char*);
 extern int ql_capture_usbmon_log(PROFILE_T *profile, const char *log_path);
 extern void ql_stop_usbmon_log(PROFILE_T *profile);
 //UINT ifc_get_addr(const char *ifname);
+extern int cdc_wdm_fd;
 static int s_link = -1;
 static void usbnet_link_change(int link, PROFILE_T *profile) {
     if (s_link == link)
@@ -56,8 +59,6 @@ static void usbnet_link_change(int link, PROFILE_T *profile) {
 static int check_ipv4_address(PROFILE_T *profile) {
     uint32_t oldAddress = profile->ipv4.Address;
 
-    if (profile->request_ops == &mbim_request_ops)
-        return 1; //we will get a new ipv6 address per requestGetIPAddress()
     if (profile->request_ops == &atc_request_ops) {
        if (!profile->udhcpc_ip) return 1;
        oldAddress = profile->udhcpc_ip;
@@ -251,6 +252,8 @@ static int usage(const char *progname) {
     dbg_time("-b                                     Enable network interface bridge function (default 0)");
     dbg_time("-v                                     Verbose log mode, for debug purpose.");
     dbg_time("-d                                     Obtain the IP address and dns through qmi");
+    dbg_time("-a                                     1:Device attempts to bring up a call with the APN name,if -a 1 need add -s apn_name ;2:Device attempts to bring up a call with the APN type,if -a 2 need add -y apn_type");
+    dbg_time("-y                                     Set APN type 0:APN type unspecified 1:internet traffic. 2:IMS");
     dbg_time("[Examples]");
     dbg_time("Example 1: %s ", progname);
     dbg_time("Example 2: %s -s 3gnet ", progname);
@@ -284,6 +287,8 @@ static int qmi_main(PROFILE_T *profile)
         if (!reattach_driver(profile)) 
             sleep(2);
     }
+
+    g_donot_exit_when_modem_hangup = 0;
 
     /* try to recreate FDs*/
     if (socketpair( AF_LOCAL, SOCK_STREAM, 0, signal_control_fd) < 0 ) {
@@ -325,17 +330,17 @@ static int qmi_main(PROFILE_T *profile)
 
     if (request_ops->requestSetLoopBackState && profile->loopback_state) {
     	qmierr = request_ops->requestSetLoopBackState(profile->loopback_state, profile->replication_factor);
-    	if (qmierr != QMI_ERR_INVALID_QMI_CMD) //X20 return this error 
-            profile->loopback_state = 0; //wait for RIL_UNSOL_LOOPBACK_CONFIG_IND
+    	//if (qmierr != QMI_ERR_INVALID_QMI_CMD) //X20 return this error 
+        //    profile->loopback_state = 0; //wait for RIL_UNSOL_LOOPBACK_CONFIG_IND
     }
 
     if (request_ops->requestGetSIMStatus) {
         qmierr = request_ops->requestGetSIMStatus(&SIMStatus);
 
-        while (qmierr == QMI_ERR_OP_DEVICE_UNSUPPORTED) {
-            sleep(1);
-            qmierr = request_ops->requestGetSIMStatus(&SIMStatus);
-        }
+        //while (qmierr == QMI_ERR_OP_DEVICE_UNSUPPORTED) {
+        //    sleep(1);
+        //    qmierr = request_ops->requestGetSIMStatus(&SIMStatus);
+        //}
 
         if ((SIMStatus == SIM_PIN) && profile->pincode && request_ops->requestEnterSimPin) {
             request_ops->requestEnterSimPin(profile->pincode);
@@ -349,11 +354,12 @@ static int qmi_main(PROFILE_T *profile)
         if (request_ops->requestGetIMSI)
             request_ops->requestGetIMSI();
     }
-
+if(profile->usb_dev.idProduct != 0x0316)
+{
     if (request_ops->requestGetProfile)
         request_ops->requestGetProfile(profile);
 
-    if (request_ops->requestSetProfile && (profile->apn || profile->user || profile->password)) {
+    if (request_ops->requestSetProfile && (profile->apn || profile->user || profile->pd)) {
         if (request_ops->requestSetProfile(profile) == 1) {
 #ifdef REBOOT_SIM_CARD_WHEN_APN_CHANGE //enable at only when customer asked 
             if (request_ops->requestRadioPower) {
@@ -363,7 +369,7 @@ static int qmi_main(PROFILE_T *profile)
 #endif
         }
     }
-
+}
     request_ops->requestRegistrationState(&PSAttachedState);
 
 #ifdef CONFIG_ENABLE_QOS
@@ -435,7 +441,7 @@ static int qmi_main(PROFILE_T *profile)
                             if (profile->enable_ipv4 && IPv4ConnectionStatus !=  QWDS_PKT_DATA_CONNECTED) {
                                 qmierr = request_ops->requestSetupDataCall(profile, IpFamilyV4);
 
-                                if ((qmierr > 0) && profile->user && profile->user[0] && profile->password && profile->password[0]) {
+                                if ((qmierr > 0) && profile->user && profile->user[0] && profile->pd && profile->pd[0]) {
                                     int old_auto =  profile->auth;
 
                                     //may be fail because wrong auth mode, try pap->chap, or chap->pap
@@ -455,17 +461,8 @@ static int qmi_main(PROFILE_T *profile)
                             }
 
                             if (profile->enable_ipv6 && IPv6ConnectionStatus !=  QWDS_PKT_DATA_CONNECTED) {
-                                if (profile->enable_ipv4 && profile->request_ops != &qmi_request_ops) {
+                                if (profile->enable_ipv4 ) {
                                     IPv6ConnectionStatus = IPv4ConnectionStatus;
-                                }
-                                else {
-                                    qmierr = request_ops->requestSetupDataCall(profile, IpFamilyV6);
-
-                                    if (!qmierr) {
-                                        qmierr = request_ops->requestGetIPAddress(profile, IpFamilyV6);
-                                        if (!qmierr)
-                                            IPv6ConnectionStatus = QWDS_PKT_DATA_CONNECTED;
-                                    }
                                 }
                             }
                                 
@@ -544,11 +541,8 @@ static int qmi_main(PROFILE_T *profile)
                             }
 
                             if (profile->enable_ipv6 && IPv6ConnectionStatus != QWDS_PKT_DATA_DISCONNECTED) {
-                                if (profile->enable_ipv4 && profile->request_ops != &qmi_request_ops) {
+                                if (profile->enable_ipv4) {
                                     IPv6ConnectionStatus = IPv4ConnectionStatus;
-                                }
-                                else {
-                                    request_ops->requestQueryDataCall(&IPv6ConnectionStatus, IpFamilyV6);
                                 }
                             }
                             else {
@@ -578,11 +572,8 @@ static int qmi_main(PROFILE_T *profile)
                                 request_ops->requestDeactivateDefaultPDP(profile, IpFamilyV4);
                             }
                             if (profile->enable_ipv6 && IPv6ConnectionStatus ==  QWDS_PKT_DATA_CONNECTED) {
-                                if (profile->enable_ipv4 && profile->request_ops != &qmi_request_ops) {
+                                if (profile->enable_ipv4) {
                                     
-                                }
-                                else {
-                                    request_ops->requestDeactivateDefaultPDP(profile, IpFamilyV6);
                                 }
                             }
                             usbnet_link_change(0, profile);
@@ -633,20 +624,6 @@ static int qmi_main(PROFILE_T *profile)
                             goto __main_quit;
                         }
                         break;
-
-                    	case RIL_UNSOL_LOOPBACK_CONFIG_IND:
-                        {
-                        	QMI_WDA_SET_LOOPBACK_CONFIG_IND_MSG SetLoopBackInd;
-                        	if (read(fd, &SetLoopBackInd, sizeof(SetLoopBackInd)) == sizeof(SetLoopBackInd)) {
-                            	profile->loopback_state = SetLoopBackInd.loopback_state.TLVVaule;
-                            	profile->replication_factor = le32_to_cpu(SetLoopBackInd.replication_factor.TLVVaule);
-                            	dbg_time("SetLoopBackInd: loopback_state=%d, replication_factor=%u",
-                                	profile->loopback_state, profile->replication_factor);
-                            	if (profile->loopback_state)
-                                	send_signo_to_main(SIG_EVENT_START);
-                            }
-                        }
-                    	break;
 #ifdef CONFIG_REG_QOS_IND
                         case RIL_UNSOL_GLOBAL_QOS_FLOW_IND_QOS_ID:
                         {
@@ -695,17 +672,9 @@ static int quectel_CM(PROFILE_T *profile)
     else if (mhidevice_detect(qmichannel, usbnet_adapter, profile)) {
         profile->hardware_interface = HARDWARE_PCIE;
     }
-	else if (atdevice_detect(qmichannel, usbnet_adapter, profile)) {
+    else if (atdevice_detect(qmichannel, usbnet_adapter, profile)) {
         profile->hardware_interface = HARDWARE_PCIE;
     }
-#ifdef CONFIG_QRTR
-    else if (1) {
-        strcpy(qmichannel, "qrtr");
-        strcpy(usbnet_adapter, "rmnet_mhi0");
-        profile->hardware_interface = HARDWARE_PCIE;
-        profile->software_interface = SOFTWARE_QRTR;
-    }
-#endif
     else {
         dbg_time("qmidevice_detect failed");
         goto error;
@@ -721,45 +690,13 @@ static int quectel_CM(PROFILE_T *profile)
     if (profile->hardware_interface == HARDWARE_USB) {
         profile->software_interface = get_driver_type(profile);
     }
-  
-    ql_qmap_mode_detect(profile);
-
-    if (profile->software_interface == SOFTWARE_MBIM) {
-        dbg_time("Modem works in MBIM mode");
-        profile->request_ops = &mbim_request_ops;
-        profile->qmi_ops = &mbim_dev_ops;
-        if (!profile->apn || !profile->apn[0]) {
-            //see FAE-51804  FAE-59811
-            dbg_time("When MBIM mode, must specify APN with '-s', or setup data call may fail!");
-            exit(-404); //if no such issue on your side, please comment this
-        }
-        ret = qmi_main(profile);
-    }
-    else if (profile->software_interface == SOFTWARE_QMI) {
-        dbg_time("Modem works in QMI mode");
-        profile->request_ops = &qmi_request_ops;
-        if (qmidev_is_gobinet(profile->qmichannel))
-            profile->qmi_ops = &gobi_qmidev_ops;
-        else
-            profile->qmi_ops = &qmiwwan_qmidev_ops;
-        qmidev_send = profile->qmi_ops->send;
-        ret = qmi_main(profile);
-    }
-    else if (profile->software_interface == SOFTWARE_ECM_RNDIS_NCM) {
+    
+    if (profile->software_interface == SOFTWARE_ECM_RNDIS_NCM) {
         dbg_time("Modem works in ECM_RNDIS_NCM mode");
         profile->request_ops = &atc_request_ops;
         profile->qmi_ops = &atc_dev_ops;
         ret = qmi_main(profile);
     }
-#ifdef CONFIG_QRTR
-    else if (profile->software_interface == SOFTWARE_QRTR) {
-        dbg_time("Modem works in QRTR mode");
-        profile->request_ops = &qmi_request_ops;
-        profile->qmi_ops = &qrtr_qmidev_ops;
-        qmidev_send = profile->qmi_ops->send;
-        ret = qmi_main(profile);
-    }
-#endif
     else {
         dbg_time("unsupport software_interface %d", profile->software_interface);
     }
@@ -772,7 +709,7 @@ error:
 
 static int parse_user_input(int argc, char **argv, PROFILE_T *profile) {
     int opt = 1;
-
+    int apn_name_or_type;
     profile->pdp = CONFIG_DEFAULT_PDP;
     profile->profile_index = CONFIG_DEFAULT_PDP;
 
@@ -788,7 +725,7 @@ static int parse_user_input(int argc, char **argv, PROFILE_T *profile) {
         switch (argv[opt++][1])
         {
             case 's':
-                profile->apn = profile->user = profile->password = "";
+                profile->apn = profile->user = profile->pd = "";
                 if (has_more_argv()) {
                     profile->apn = argv[opt++];
                 }
@@ -796,8 +733,8 @@ static int parse_user_input(int argc, char **argv, PROFILE_T *profile) {
                     profile->user = argv[opt++];
                 }
                 if (has_more_argv()) {
-                    profile->password = argv[opt++];
-                    if (profile->password && profile->password[0])
+                    profile->pd = argv[opt++];
+                    if (profile->pd && profile->pd[0])
                         profile->auth = 2; //default chap, customers may miss auth
                 }
                 if (has_more_argv()) {
@@ -826,8 +763,7 @@ static int parse_user_input(int argc, char **argv, PROFILE_T *profile) {
                 if (has_more_argv()) {
                     const char *arg = argv[opt++];
 
-                    if (!strcmp(arg, QUECTEL_QMI_PROXY) || !strcmp(arg, QUECTEL_MBIM_PROXY)
-                        || !strcmp(arg, LIBQMI_PROXY) || !strcmp(arg, LIBMBIM_PROXY) || !strcmp(arg, QUECTEL_ATC_PROXY)) {
+                    if (!strcmp(arg, QUECTEL_ATC_PROXY)) {
                         strncpy(profile->proxy, arg, sizeof(profile->proxy) - 1);
                     }
                     else if ((999 < atoi(arg)) && (atoi(arg) < 10000)) {
@@ -902,7 +838,21 @@ static int parse_user_input(int argc, char **argv, PROFILE_T *profile) {
                     profile->kill_pdp = argv[opt++][0] - '0';
                 }
                 break;
-            
+
+            case 'a':
+                if (has_more_argv()) {
+                    apn_name_or_type = argv[opt++][0] - '0';
+                    if(apn_name_or_type == 1)
+                    profile->bring_up_by_apn_name = apn_name_or_type;
+                    else if(apn_name_or_type == 2) 
+                    profile->bring_up_by_apn_type = apn_name_or_type;   
+                }
+                break;
+            case 'y':
+                if (has_more_argv()) {
+                    profile->apn_type = argv[opt++][0] - '0';
+                }
+                break;            
             default:
                 return usage(argv[0]);
             break;
@@ -921,7 +871,7 @@ int main(int argc, char *argv[])
     int ret;
     PROFILE_T *ctx = &s_profile;
 
-    dbg_time("QConnectManager_Linux_V1.6.5");
+    dbg_time("QConnectManager_Linux_V1.6.7");
 
     ret = parse_user_input(argc, argv, ctx);
     if (!ret)
