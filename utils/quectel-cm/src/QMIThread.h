@@ -1,32 +1,25 @@
-/*
-    Copyright (C) 2024 Quectel Wireless Solutions Co., Ltd.
-
-    This program is free software; you can redistribute it and/or
-    modify it under the terms of the GNU General Public License
-    as published by the Free Software Foundation; either version 2
-    of the License, or (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, see
-    <https://www.gnu.org/licenses/>.
-*/
-
-#ifndef __COMPREH_H__
-#define __COMPREH_H__
+#ifndef __QMI_THREAD_H__
+#define __QMI_THREAD_H__
 
 #define CONFIG_GOBINET
 #define CONFIG_QMIWWAN
 #define CONFIG_SIM
 #define CONFIG_APN
 #define CONFIG_VERSION
-
+//#define CONFIG_SIGNALINFO
+//#define CONFIG_CELLINFO
+//#define CONFIG_COEX_WWAN_STATE
 #define CONFIG_DEFAULT_PDP 1
+//#define CONFIG_IMSI_ICCID
 #define QUECTEL_UL_DATA_AGG
+//#define QUECTEL_QMI_MERGE
+//#define REBOOT_SIM_CARD_WHEN_APN_CHANGE
+//#define REBOOT_SIM_CARD_WHEN_LONG_TIME_NO_PS 60 //unit is seconds
+//#define CONFIG_QRTR
+//#define CONFIG_ENABLE_QOS
+//#define CONFIG_REG_QOS_IND
+//#define CONFIG_GET_QOS_INFO
+//#define CONFIG_GET_QOS_DATA_RATE
 
 #if (defined(CONFIG_REG_QOS_IND) || defined(CONFIG_GET_QOS_INFO) || defined(CONFIG_GET_QOS_DATA_RATE))
 #ifndef CONFIG_REG_QOS_IND
@@ -60,9 +53,9 @@
 #include <stddef.h>
 
 #include "qendian.h"
-//#include "QCQMI.h"
-//#include "QCQCTL.h"
-//#include "QCQMUX.h"
+#include "QCQMI.h"
+#include "QCQCTL.h"
+#include "QCQMUX.h"
 #include "util.h"
 
 #define DEVICE_CLASS_UNKNOWN           0
@@ -86,36 +79,6 @@
 #define WWAN_DATA_CLASS_1XEVDO_REVB     0x00200000 /* for future use */
 #define WWAN_DATA_CLASS_UMB             0x00400000
 #define WWAN_DATA_CLASS_CUSTOM          0x80000000
-
-#define QWDS_PKT_DATA_UNKNOW    0x00
-#define QWDS_PKT_DATA_DISCONNECTED    0x01
-#define QWDS_PKT_DATA_CONNECTED        0x02
-#define QWDS_PKT_DATA_SUSPENDED        0x03
-#define QWDS_PKT_DATA_AUTHENTICATING   0x04
-
-#define TRUE (1 == 1)
-#define FALSE (1 != 1)
-
-typedef uint8_t uint8;
-typedef int8_t int8;
-typedef uint16_t uint16;
-typedef int16_t int16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
-
-typedef signed char    CHAR;
-typedef unsigned char   UCHAR;
-typedef short   SHORT;
-typedef unsigned short   USHORT;
-typedef int   INT;
-typedef unsigned int   UINT;
-typedef long    LONG;
-typedef unsigned int   ULONG;
-typedef unsigned long long   ULONG64;
-typedef signed char   *PCHAR;
-typedef unsigned char   *PUCHAR;
-typedef int   *PINT;
-typedef int   BOOL;
 
 struct wwan_data_class_str {
     ULONG class;
@@ -142,6 +105,17 @@ typedef struct __IPV6 {
     UCHAR PrefixLengthGateway;
     ULONG Mtu;
 } IPV6_T;
+
+typedef struct {
+    UINT size;
+    UINT rx_urb_size;
+    UINT ep_type;
+    UINT iface_id;
+    UINT MuxId;
+    UINT ul_data_aggregation_max_datagrams; //0x17
+    UINT ul_data_aggregation_max_size ;//0x18
+    UINT dl_minimum_padding; //0x1A
+} QMAP_SETTING;
 
 //Configured downlink data aggregationprotocol
 #define WDA_DL_DATA_AGG_DISABLED (0x00) //DL data aggregation is disabled (default)
@@ -174,10 +148,17 @@ struct __PROFILE;
 struct qmi_device_ops {
 	int (*init)(struct __PROFILE *profile);
 	int (*deinit)(void);
+	int (*send)(PQCQMIMSG pRequest);
 	void* (*read)(void *pData);
 };
-
+#ifdef CONFIG_QRTR
+extern const struct qmi_device_ops qrtr_qmidev_ops;
+#endif
+extern const struct qmi_device_ops gobi_qmidev_ops;
+extern const struct qmi_device_ops qmiwwan_qmidev_ops;
+extern const struct qmi_device_ops mbim_dev_ops;
 extern const struct qmi_device_ops atc_dev_ops;
+extern int (*qmidev_send)(PQCQMIMSG pRequest);
 
 struct usb_device_info {
     int idVendor;
@@ -195,7 +176,12 @@ struct usb_interface_info {
     char driver[32];
 };
 
+#define LIBQMI_PROXY "qmi-proxy" //src/libqmi-glib/qmi-proxy.h
+#define LIBMBIM_PROXY "mbim-proxy"
+#define QUECTEL_QMI_PROXY "quectel-qmi-proxy"
+#define QUECTEL_MBIM_PROXY "quectel-mbim-proxy"
 #define QUECTEL_ATC_PROXY "quectel-atc-proxy"
+#define QUECTEL_QRTR_PROXY "quectel-qrtr-proxy"
 
 #ifndef bool
 #define bool uint8_t
@@ -205,7 +191,7 @@ typedef struct __PROFILE {
     //user input start
     const char *apn;
     const char *user;
-    const char *pd;
+    const char *password;
     int auth;
     int iptype;
     const char *pincode;
@@ -258,17 +244,32 @@ typedef struct __PROFILE {
     char BaseBandVersion[64];
     char old_apn[64];
     char old_user[64];
-    char old_pd[64];
+    char old_password[64];
     int old_auth;
     int old_iptype;
 
     const struct qmi_device_ops *qmi_ops;
     const struct request_ops *request_ops;
     RMNET_INFO rmnet_info;
-    BOOL bring_up_by_apn_name;
-    BOOL bring_up_by_apn_type; 
-    int apn_type;
 } PROFILE_T;
+
+#ifdef QUECTEL_QMI_MERGE
+#define MERGE_PACKET_IDENTITY 0x2c7c
+#define MERGE_PACKET_VERSION 0x0001
+#define MERGE_PACKET_MAX_PAYLOAD_SIZE 56
+typedef struct __QMI_MSG_HEADER {
+    uint16_t idenity;
+    uint16_t version;
+    uint16_t cur_len;
+    uint16_t total_len;
+} QMI_MSG_HEADER;
+
+typedef struct __QMI_MSG_PACKET {
+    QMI_MSG_HEADER header;
+    uint16_t len;
+    char buf[4096];
+} QMI_MSG_PACKET;
+#endif
 
 typedef enum {
     SIM_ABSENT = 0,
@@ -300,25 +301,25 @@ extern unsigned int cm_recv_buf[1024];
 extern int cm_open_dev(const char *dev);
 extern int cm_open_proxy(const char *name);
 extern int pthread_cond_timeout_np(pthread_cond_t *cond, pthread_mutex_t * mutex, unsigned msecs);
-//extern int QmiThreadSendQMITimeout(PQCQMIMSG pRequest, PQCQMIMSG *ppResponse, unsigned msecs, const char *funcname);
+extern int QmiThreadSendQMITimeout(PQCQMIMSG pRequest, PQCQMIMSG *ppResponse, unsigned msecs, const char *funcname);
 #define QmiThreadSendQMI(pRequest, ppResponse) QmiThreadSendQMITimeout(pRequest, ppResponse, 30 * 1000, __func__)
-//extern void QmiThreadRecvQMI(PQCQMIMSG pResponse);
+extern void QmiThreadRecvQMI(PQCQMIMSG pResponse);
 extern void udhcpc_start(PROFILE_T *profile);
 extern void udhcpc_stop(PROFILE_T *profile);
 extern void ql_set_driver_link_state(PROFILE_T *profile, int link_state);
-//extern void ql_set_driver_qmap_setting(PROFILE_T *profile, QMAP_SETTING *qmap_settings);
+extern void ql_set_driver_qmap_setting(PROFILE_T *profile, QMAP_SETTING *qmap_settings);
 extern void ql_get_driver_rmnet_info(PROFILE_T *profile, RMNET_INFO *rmnet_info);
 extern void dump_qmi(void *dataBuffer, int dataLen);
 extern void qmidevice_send_event_to_main(int triger_event);
 extern void qmidevice_send_event_to_main_ext(int triger_event, void *data, unsigned len);
 extern uint8_t qmi_over_mbim_get_client_id(uint8_t QMIType);
 extern uint8_t qmi_over_mbim_release_client_id(uint8_t QMIType, uint8_t ClientId);
-//#ifdef CONFIG_REG_QOS_IND
-//extern UCHAR ql_get_global_qos_flow_ind_qos_id(PQCQMIMSG pResponse, UINT *qos_id);
-//#endif
-//#ifdef CONFIG_GET_QOS_DATA_RATE
-//extern UCHAR ql_get_global_qos_flow_ind_data_rate(PQCQMIMSG pResponse, void *max_data_rate);
-//#endif
+#ifdef CONFIG_REG_QOS_IND
+extern UCHAR ql_get_global_qos_flow_ind_qos_id(PQCQMIMSG pResponse, UINT *qos_id);
+#endif
+#ifdef CONFIG_GET_QOS_DATA_RATE
+extern UCHAR ql_get_global_qos_flow_ind_data_rate(PQCQMIMSG pResponse, void *max_data_rate);
+#endif
 
 struct request_ops {
     int (*requestBaseBandVersion)(PROFILE_T *profile);
@@ -342,7 +343,8 @@ struct request_ops {
     int (*requestGetQosInfo)(PROFILE_T *profile);
     int (*requestGetCoexWWANState)(void);
 };
-
+extern const struct request_ops qmi_request_ops;
+extern const struct request_ops mbim_request_ops;
 extern const struct request_ops atc_request_ops;
 
 extern int get_driver_type(PROFILE_T *profile);
@@ -353,11 +355,16 @@ extern int ql_bridge_mode_detect(PROFILE_T *profile);
 extern int ql_enable_qmi_wwan_rawip_mode(PROFILE_T *profile);
 extern int ql_qmap_mode_detect(PROFILE_T *profile);
 #ifdef CONFIG_QRTR
-extern int rtrmnet_ctl_new_vnd(char *devname, char *vndname, uint8_t muxid,
+extern int rtrmnet_ctl_create_vnd(char *devname, char *vndname, uint8_t muxid,
 		       uint32_t qmap_version, uint32_t ul_agg_cnt, uint32_t ul_agg_size);
-extern int rtrmnet_ctl_get_vnd(char *vndname, int *muxid,
-		       int *qmap_version);
 #endif
+
+#define qmidev_is_gobinet(_qmichannel) (strncmp(_qmichannel, "/dev/qcqmi", strlen("/dev/qcqmi")) == 0)
+#define qmidev_is_qmiwwan(_qmichannel) (strncmp(_qmichannel, "/dev/cdc-wdm", strlen("/dev/cdc-wdm")) == 0)
+#define qmidev_is_pciemhi(_qmichannel) (strncmp(_qmichannel, "/dev/mhi_", strlen("/dev/mhi_")) == 0)
+
+#define driver_is_qmi(_drv_name) (strncasecmp(_drv_name, "qmi_wwan", strlen("qmi_wwan")) == 0)
+#define driver_is_mbim(_drv_name) (strncasecmp(_drv_name, "cdc_mbim", strlen("cdc_mbim")) == 0)
 
 extern FILE *logfilefp;
 extern int debug_qmi;
@@ -378,7 +385,6 @@ enum
 	SOFTWARE_QRTR,
 	HARDWARE_PCIE,
 	HARDWARE_USB,
-	HARDWARE_IPA,
 };
 
 enum
@@ -404,13 +410,13 @@ typedef enum
 #ifdef CM_DEBUG
 #define dbg_time(fmt, args...) do { \
     fprintf(stdout, "[%15s-%04d: %s] " fmt "\n", __FILE__, __LINE__, get_time(), ##args); \
-    fflush(stdout);\
+	fflush(stdout);\
     if (logfilefp) fprintf(logfilefp, "[%s-%04d: %s] " fmt "\n", __FILE__, __LINE__, get_time(), ##args); \
 } while(0)
 #else
 #define dbg_time(fmt, args...) do { \
     fprintf(stdout, "[%s] " fmt "\n", get_time(), ##args); \
-    fflush(stdout);\
+	fflush(stdout);\
     if (logfilefp) fprintf(logfilefp, "[%s] " fmt "\n", get_time(), ##args); \
 } while(0)
 #endif
