@@ -1,21 +1,18 @@
-/*
-    Copyright (C) 2024 Quectel Wireless Solutions Co., Ltd.
+/******************************************************************************
+  @file    udhcpc.c
+  @brief   call DHCP tools to obtain IP address.
 
-    This program is free software; you can redistribute it and/or
-    modify it under the terms of the GNU General Public License
-    as published by the Free Software Foundation; either version 2
-    of the License, or (at your option) any later version.
+  DESCRIPTION
+  Connectivity Management Tool for USB network adapter of Quectel wireless cellular modules.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+  INITIALIZATION AND SEQUENCING REQUIREMENTS
+  None.
 
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, see
-    <https://www.gnu.org/licenses/>.
-*/
-
+  ---------------------------------------------------------------------------
+  Copyright (c) 2016 - 2023 Quectel Wireless Solution, Co., Ltd.  All Rights Reserved.
+  Quectel Wireless Solution Proprietary and Confidential.
+  ---------------------------------------------------------------------------
+******************************************************************************/
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/types.h>
@@ -26,7 +23,7 @@
 #include <endian.h>
 
 #include "util.h"
-#include "compreh.h"
+#include "QMIThread.h"
 
 #define IFDOWN_SCRIPT "/etc/quectel/ifdown.sh"
 #define IFUP_SCRIPT "/etc/quectel/ifup.sh"
