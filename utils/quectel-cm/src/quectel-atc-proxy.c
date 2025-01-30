@@ -1,18 +1,21 @@
-/******************************************************************************
-  @file    quectel-atc-proxy.c
-  @brief   atc proxy.
+/*
+    Copyright (C) 2024 Quectel Wireless Solutions Co., Ltd.
 
-  DESCRIPTION
-  Connectivity Management Tool for USB network adapter of Quectel wireless cellular modules.
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License
+    as published by the Free Software Foundation; either version 2
+    of the License, or (at your option) any later version.
 
-  INITIALIZATION AND SEQUENCING REQUIREMENTS
-  None.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
 
-  ---------------------------------------------------------------------------
-  Copyright (c) 2016 - 2023 Quectel Wireless Solution, Co., Ltd.  All Rights Reserved.
-  Quectel Wireless Solution Proprietary and Confidential.
-  ---------------------------------------------------------------------------
-******************************************************************************/
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, see
+    <https://www.gnu.org/licenses/>.
+*/
+
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,7 +57,7 @@
 #include <inttypes.h>
 
 #include "qlist.h"
-#include "QMIThread.h"
+#include "compreh.h"
 #include "atchannel.h"
 #include "at_tok.h"
 
