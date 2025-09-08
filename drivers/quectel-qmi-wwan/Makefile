@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=quectel-qmi-wwan
-PKG_VERSION:=1.2.6
+PKG_VERSION:=1.2.9
 PKG_RELEASE:=2
 
 include $(INCLUDE_DIR)/kernel.mk
