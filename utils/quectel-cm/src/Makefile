@@ -31,16 +31,16 @@ debug: clean
 	$(CC) ${CFLAGS} -g -DCM_DEBUG ${QL_CM_SRC} ${QL_CM_DHCP} -o quectel-CM -lpthread -ldl -lrt
 
 qmi-proxy:
-	$(CC) ${CFLAGS} quectel-qmi-proxy.c -o quectel-qmi-proxy ${LDFLAGS}
+	$(CC) ${CFLAGS} quectel-qmi-proxy.c -o quectel-qmi-proxy ${LDFLAGS} 
 
 mbim-proxy:
-	$(CC) ${CFLAGS} quectel-mbim-proxy.c -o quectel-mbim-proxy ${LDFLAGS}
+	$(CC) ${CFLAGS} quectel-mbim-proxy.c -o quectel-mbim-proxy ${LDFLAGS} 
 
 qrtr-proxy:
-	$(CC) ${CFLAGS} quectel-qrtr-proxy.c -o quectel-qrtr-proxy ${LDFLAGS}
+	$(CC) ${CFLAGS} quectel-qrtr-proxy.c -o quectel-qrtr-proxy ${LDFLAGS} 
 
 atc-proxy:
-	$(CC) ${CFLAGS} quectel-atc-proxy.c atchannel.c at_tok.c util.c -o quectel-atc-proxy ${LDFLAGS}
+	$(CC) ${CFLAGS} quectel-atc-proxy.c atchannel.c at_tok.c util.c -o quectel-atc-proxy ${LDFLAGS} 
 
 clean:
 	rm -rf *.o libmnl/*.o quectel-CM quectel-qmi-proxy quectel-mbim-proxy quectel-atc-proxy
