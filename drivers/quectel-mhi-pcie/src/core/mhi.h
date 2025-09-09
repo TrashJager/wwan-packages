@@ -827,6 +827,23 @@ int mhi_get_remote_time_sync(struct mhi_device *mhi_dev,
 			     u64 *t_dev);
 
 /**
+ * mhi_get_remote_time - Get external modem time relative to host time
+ * Trigger event to capture modem time, also capture host time so client
+ * can do a relative drift comparision.
+ * Recommended only tsync device calls this method and do not call this
+ * from atomic context
+ * @mhi_dev: Device associated with the channels
+ * @sequence:unique sequence id track event
+ * @cb_func: callback function to call back
+ */
+int mhi_get_remote_time(struct mhi_device *mhi_dev,
+			u32 sequence,
+			void (*cb_func)(struct mhi_device *mhi_dev,
+					u32 sequence,
+					u64 local_time,
+					u64 remote_time));
+
+/**
  * mhi_get_mhi_state - Return MHI state of device
  * @mhi_cntrl: MHI controller
  */
