@@ -57,6 +57,7 @@ typedef struct _bhi_info_type
    ULONG bhi_rsvd5;
 }BHI_INFO_TYPE, *PBHI_INFO_TYPE;
 
+#if 0
 static void PrintBhiInfo(struct mhi_controller *mhi_cntrl, BHI_INFO_TYPE *bhi_info)
 {
    ULONG index;
@@ -82,7 +83,8 @@ static void PrintBhiInfo(struct mhi_controller *mhi_cntrl, BHI_INFO_TYPE *bhi_in
    }
    MHI_LOG("BHI OEM PK Hash           =  %s\n", str);
 }
-
+#endif
+#if 0
 static u32 bhi_read_reg(struct mhi_controller *mhi_cntrl, u32 offset)
 {
 	u32 out = 0;
@@ -90,7 +92,8 @@ static u32 bhi_read_reg(struct mhi_controller *mhi_cntrl, u32 offset)
 
 	return (ret) ? 0 : out;
 }
-
+#endif
+#if 0
 static int BhiRead(struct mhi_controller *mhi_cntrl, BHI_INFO_TYPE *bhi_info)
 {
 	ULONG index;
@@ -136,6 +139,7 @@ static int BhiRead(struct mhi_controller *mhi_cntrl, BHI_INFO_TYPE *bhi_info)
 	/* Return the number of bytes read */
 	return 0;
 }
+#endif
 
 /* setup rddm vector table for rddm transfer */
 static void mhi_rddm_prepare(struct mhi_controller *mhi_cntrl,
@@ -728,6 +732,7 @@ error_alloc_fw_table:
 	release_firmware(firmware);
 }
 
+#if 0
 int BhiWrite(struct mhi_controller *mhi_cntrl, void __user *ubuf, size_t size)
 {
 	int ret;
@@ -858,3 +863,4 @@ long bhi_write_image(struct mhi_controller *mhi_cntrl, void __user *ubuf)
 
 	return ret;
 }
+#endif 
